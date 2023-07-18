@@ -1,0 +1,6 @@
+target/
+**/*.tmp
+stockfish
+*.svg
+*.res
+*.data

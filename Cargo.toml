@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+  "bitboard",
+  "chessengine",
+  "utils",
+]
+
+[profile.release]
+debug = true
