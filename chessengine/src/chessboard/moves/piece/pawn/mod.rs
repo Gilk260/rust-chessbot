@@ -9,11 +9,11 @@ use super::*;
 
 pub fn generate_pseudo_moves(
     pawns: u64,
-    enemies: &u64,
     chessboard: &Chessboard,
-    color: &Color
-) -> Vec<Move> {
-    let mut moves = Vec::new();
+    color: &Color,
+    moves: &mut Vec<Move>,
+) {
+    let enemies = chessboard.get_colors(&chessboard.turn.opposite());
 
     moves.append(&mut generate_single_push_moves(pawns, chessboard, color));
     moves.append(&mut generate_double_push_moves(pawns, chessboard, color));
@@ -24,8 +24,6 @@ pub fn generate_pseudo_moves(
     };
 
     moves.append(&mut generate_capture_moves(pawns, &(enemies | ep), chessboard, color));
-
-    moves
 }
 
 fn generate_single_push_moves(
@@ -33,11 +31,14 @@ fn generate_single_push_moves(
     chessboard: &Chessboard,
     color: &Color,
 ) -> Vec<Move> {
+    let mut moves = Vec::new();
     let single_push_targets: u64 = pawn::single_push_targets(pawns, chessboard.empty_board, color);
     // println!("single_push_targets: {:b}", single_push_targets);
     let direction = if color == &Color::White { direction::SOUT } else { direction::NORT };
 
-    convert_bb_to_moves(chessboard, single_push_targets, direction)
+    convert_bb_to_moves(chessboard, single_push_targets, direction, &mut moves);
+
+    moves
 }
 
 fn generate_double_push_moves(
@@ -45,10 +46,13 @@ fn generate_double_push_moves(
     chessboard: &Chessboard,
     color: &Color,
 ) -> Vec<Move> {
+    let mut moves = Vec::new();
     let double_push_targets: u64 = pawn::double_push_targets(pawns, chessboard.empty_board, color);
     let direction = if color == &Color::White { direction::SOUT } else { direction::NORT };
 
-    convert_bb_to_moves(chessboard, double_push_targets, direction * 2)
+    convert_bb_to_moves(chessboard, double_push_targets, direction * 2, &mut moves);
+
+    moves
 }
 
 pub fn generate_capture_moves(
@@ -65,8 +69,8 @@ pub fn generate_capture_moves(
 
     let mut moves = Vec::new();
 
-    moves.append(&mut convert_bb_to_moves(chessboard, west_attack_targets, west_direction));
-    moves.append(&mut convert_bb_to_moves(chessboard, east_attack_targets, east_direction));
+    convert_bb_to_moves(chessboard, west_attack_targets, west_direction, &mut moves);
+    convert_bb_to_moves(chessboard, east_attack_targets, east_direction, &mut moves);
 
     moves
 }
@@ -234,7 +238,8 @@ mod tests {
         let color = chessboard.turn;
         let pawns = chessboard.get_pieces_color(&Piece::Pawn, &color);
         let enemies = chessboard.get_colors(&chessboard.get_opposite_color(&color));
-        let mut moves = generate_pseudo_moves(pawns, &enemies, &chessboard, &color);
+        let mut moves = Vec::new();
+        generate_pseudo_moves(pawns, &chessboard, &color, &mut moves);
         moves.sort();
         assert_eq!(moves.len(), expected_moves.len());
         assert_eq!(moves, expected_moves);

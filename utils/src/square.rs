@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::file::File;
 use super::rank::Rank;
 
@@ -22,8 +24,8 @@ impl Square {
     }
 
     pub fn from_string(string: &str) -> Square {
-        let file = File::from_char(string[0..1].chars().collect::<Vec<char>>()[0]);
-        let rank = Rank::from_char(string[1..2].chars().collect::<Vec<char>>()[0]);
+        let file = File::from_char(string.chars().nth(0).unwrap());
+        let rank = Rank::from_char(string.chars().nth(1).unwrap());
         Square::new(file, rank)
     }
 
@@ -37,5 +39,11 @@ impl Square {
 
     pub fn to_string(&self) -> String {
         format!("{}{}", self.file.to_char(), self.rank.to_char())
+    }
+}
+
+impl fmt::Display for Square {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_string())
     }
 }

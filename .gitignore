@@ -4,3 +4,6 @@ stockfish
 *.svg
 *.res
 *.data
+perf.data.old
+callgrind.out.*
+profile.coz

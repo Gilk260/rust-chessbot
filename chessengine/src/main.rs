@@ -1,12 +1,13 @@
 use utils;
 
+mod chessai;
 mod chessboard;
 
 fn main() {
     let args = utils::parse_args(std::env::args());
     match args.get_flag() {
         utils::Flag::Ai => {
-            println!("Launch AI.");
+            chessai::run_ai();
         },
         utils::Flag::Help => {
             utils::print_help();

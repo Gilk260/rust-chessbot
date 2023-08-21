@@ -4,9 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+debug = 1
 
 [dependencies]
 utils = { path = "../utils" }
 bitboard = { path = "../bitboard" }
 lazy_static = "1.4.0"
+rand = "0.8.4"
 #flamegraph = "0.2"
+#coz = "0.1"
+

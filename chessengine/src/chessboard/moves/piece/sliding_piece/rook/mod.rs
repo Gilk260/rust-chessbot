@@ -1,12 +1,8 @@
-use std::println;
-
-use bitboard::bit_scan_forward;
+use bitboard::{bit_scan_forward, north_one, south_one, east_one, west_one};
 use lazy_static::lazy_static;
-use utils::{file::{NOT_H_FILE, NOT_A_FILE}, direction::{NORT, EAST}, color::Color, square::Square};
+use utils::{file::{NOT_H_FILE, NOT_A_FILE}, direction::{NORT, EAST}, color::Color};
 
 use crate::chessboard::{Chessboard, moves::Move};
-
-use super::convert_bb_to_moves;
 
 lazy_static! {
     pub static ref INIT_ROOK: [u64; 64] = make_init_rook();
@@ -75,22 +71,40 @@ pub fn generate_pseudo_moves(
     rooks: u64,
     chessboard: &Chessboard,
     color: &Color,
-) -> Vec<Move> {
-    let mut moves: Vec<Move> = Vec::new();
+    moves: &mut Vec<Move>
+) {
     let mut bb = rooks;
     let allies = chessboard.get_colors(color);
-    let empty = chessboard.empty_board;
 
     while bb != 0 {
         let square = bit_scan_forward(bb) as usize;
-        let targets = get_rook_targets(square, empty) & !allies;
 
-        moves.append(&mut convert_bb_to_moves(chessboard, targets, Square::from_u32(square as u32)));
+        chessboard.generate_rook_moves(square, allies, moves);
 
         bb ^= 1 << square;
     }
+}
 
-    moves
+impl Chessboard {
+    pub fn generate_rook_moves(&self,
+                               square: usize,
+                               allies: u64,
+                               moves: &mut Vec<Move>
+                              ) {
+        let sliding = super::SlidingPiece {
+            mask: MASK_ROOK[square],
+            init: INIT_ROOK[square],
+            step: STEP_ROOK[square],
+            directions: [
+                north_one,
+                south_one,
+                east_one,
+                west_one,
+            ].to_vec(),
+        };
+
+        self.generate_sliding_piece_moves(square, allies, &sliding, moves);
+    }
 }
 
 fn get_rook_targets(
@@ -156,7 +170,7 @@ mod test {
         assert_eq!(get_rook_targets(square, empty), expected);
     }
 
-    use utils::piece::Piece;
+    use utils::{piece::Piece, square::Square};
 
     #[test]
     fn test_generate_pseudo_moves() {
@@ -165,18 +179,21 @@ mod test {
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/8/8 w - - 0 1".to_string());
         let rooks = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(rooks, &chessboard, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(rooks, &chessboard, color, moves);
         assert_eq!(moves.len(), 0);
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/8/R7 w - - 0 1".to_string());
         let rooks = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(rooks, &chessboard, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(rooks, &chessboard, color, moves);
         assert_eq!(moves.len(), 14);
         assert!(moves.contains(&Move::new(Square::from_string("a1"), Square::from_string("a2"))));
 
         let chessboard = Chessboard::new("8/8/2p5/8/8/2R5/8/8 w - - 0 1".to_string());
         let rooks = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(rooks, &chessboard, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(rooks, &chessboard, color, moves);
         let mut expected = Move::new(Square::from_string("c3"), Square::from_string("c6"));
         expected.capture = Some(Piece::Pawn);
         assert!(moves.contains(&expected));

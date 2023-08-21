@@ -1,11 +1,9 @@
-use bitboard::bit_scan_forward;
-use utils::{file::{NOT_A_FILE, NOT_H_FILE}, color::Color, square::Square, direction::{NOEA, NOWE}};
+use bitboard::{bit_scan_forward, no_east_one, no_west_one, so_east_one, so_west_one};
+use utils::{file::{NOT_A_FILE, NOT_H_FILE}, color::Color, direction::{NOEA, NOWE}};
 
 use lazy_static::lazy_static;
 
 use crate::chessboard::{moves::Move, Chessboard};
-
-use super::convert_bb_to_moves;
 
 lazy_static! {
     pub static ref INIT_BISHOP: [u64; 64] = make_init_bishop();
@@ -76,26 +74,43 @@ pub fn generate_pseudo_moves(
     bishops: u64,
     chessboard: &Chessboard,
     color: &Color,
-) -> Vec<Move> {
-    let mut moves: Vec<Move> = Vec::new();
+    moves: &mut Vec<Move>,
+) {
     let mut bb = bishops;
     let allies = chessboard.get_colors(&color);
-    let empty = chessboard.empty_board;
 
     while bb != 0 {
         let square = bit_scan_forward(bb) as usize;
-        let targets = get_bishop_targets(square, empty) & !allies;
 
-        moves.append(&mut convert_bb_to_moves(chessboard, targets, Square::from_u32(square as u32)));
+        chessboard.generate_bishop_moves(square, allies, moves);
 
         bb ^= 1 << square;
     }
-
-    moves
 }
 
+impl Chessboard {
+    pub fn generate_bishop_moves(&self,
+                                 square: usize,
+                                 allies: u64,
+                                 moves: &mut Vec<Move>) {
+        let sliding = super::SlidingPiece {
+            mask: MASK_BISHOP[square],
+            init: INIT_BISHOP[square],
+            step: STEP_BISHOP[square],
+            directions: [
+                no_east_one,
+                no_west_one,
+                so_east_one,
+                so_west_one,
+            ].to_vec(),
+        };
+
+        self.generate_sliding_piece_moves(square, allies, &sliding, moves);
+    }
+}
+
+
 // Compute all square attacked by the bishop
-// It returns also the squares occupied by the allies, need to compute after
 fn get_bishop_targets(
     square: usize,
     empty: u64,
@@ -161,7 +176,7 @@ mod tests {
         assert_eq!(get_bishop_targets(square, empty), expected);
     }
 
-    use utils::piece::Piece;
+    use utils::{piece::Piece, square::Square};
 
     #[test]
     fn test_generate_moves() {
@@ -170,19 +185,22 @@ mod tests {
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/8/8 w - - 0 1".to_string());
         let bishops: u64 = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(bishops, &chessboard, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(bishops, &chessboard, color, moves);
         assert!(moves.is_empty());
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/8/B7 w - - 0 1".to_string());
         let bishops: u64 = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(bishops, &chessboard, color);
-        assert_eq!(moves.len(), 7);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(bishops, &chessboard, color, moves);
+        assert_eq!(moves.len(), 7, "\n{:?}", moves);
         assert!(moves.contains(&Move::new(Square::from_string("a1"), Square::from_string("b2"))));
         assert!(moves.contains(&Move::new(Square::from_string("a1"), Square::from_string("h8"))));
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/1b6/B7 w - - 0 1".to_string());
         let bishops: u64 = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(bishops, &chessboard, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(bishops, &chessboard, color, moves);
         let mut expected = Move::new(Square::from_string("a1"), Square::from_string("b2"));
         expected.capture = Some(Piece::Bishop);
         assert_eq!(moves.len(), 1);
@@ -190,7 +208,17 @@ mod tests {
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/1P6/B7 w - - 0 1".to_string());
         let bishops: u64 = chessboard.get_pieces_color(&piece, color);
-        let moves = generate_pseudo_moves(bishops, &chessboard, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(bishops, &chessboard, color, moves);
         assert_eq!(moves.len(), 0);
+
+        let chessboard = Chessboard::new("8/8/8/8/4B3/8/8/8 w - - 0 1".to_string());
+        let bishops: u64 = chessboard.get_pieces_color(&piece, color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(bishops, &chessboard, color, moves);
+        for mv in moves.iter() {
+            eprintln!("{}", mv.to_string());
+        }
+        assert_eq!(moves.len(), 13);
     }
 }

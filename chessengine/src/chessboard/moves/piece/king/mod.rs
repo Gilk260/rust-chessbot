@@ -21,18 +21,20 @@ const KING_MOVES: [(i32, fn(u64) -> u64); 8] = [
 pub fn generate_pseudo_moves(
     king: u64,
     chessboard: &Chessboard,
-    color: &Color
-) -> Vec<Move> {
-    let mut moves = Vec::new();
+    color: &Color,
+    moves: &mut Vec<Move>,
+) {
     let allies = chessboard.get_colors(&color);
+
+    if king == 0 {
+        return;
+    }
 
     for (direction, f) in KING_MOVES.iter() {
         let targets = f(king) & !allies;
 
-        moves.append(&mut convert_bb_to_moves(chessboard, targets, -*direction));
+        convert_bb_to_moves(chessboard, targets, -*direction, moves);
     }
-
-    moves
 }
 
 fn generate_castle_move(chessboard: &Chessboard, square: &Square, color: &Color, queen_side: bool) -> Vec<Move> {
@@ -74,7 +76,7 @@ fn generate_castle_move(chessboard: &Chessboard, square: &Square, color: &Color,
         distance += 1;
     }
 
-    // Check if the squares between the king and the rook are empty and not attacked
+    // Check if the squares between the king and the rook are not attacked
     for i in 0..3 {
         let square = Square::from_u32((square.to_u32() as i32 + i * direction) as u32);
         if chessboard.is_attacked_square(square.to_bitboard(), color) {
@@ -113,19 +115,22 @@ mod tests {
         let chessboard = Chessboard::new("8/8/8/8/8/8/8/8 w - - 0 1".to_string());
         let color = Color::White;
         let king = chessboard.get_pieces_color(&Piece::King, &color);
-        let moves = generate_pseudo_moves(king, &chessboard, &color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(king, &chessboard, &color, moves);
         assert_eq!(moves.len(), 0);
 
         let chessboard = Chessboard::new("8/8/8/3K4/8/8/8/8 w - - 0 1".to_string());
         let color = Color::White;
         let king = chessboard.get_pieces_color(&Piece::King, &color);
-        let moves = generate_pseudo_moves(king, &chessboard, &color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(king, &chessboard, &color, moves);
         assert_eq!(moves.len(), 8);
 
         let chessboard = Chessboard::new("8/8/8/8/8/8/8/KP6 w - - 0 1".to_string());
         let color = Color::White;
         let king = chessboard.get_pieces_color(&Piece::King, &color);
-        let moves = generate_pseudo_moves(king, &chessboard, &color);
+        let moves = &mut Vec::new();
+        generate_pseudo_moves(king, &chessboard, &color, moves);
         assert_eq!(moves.len(), 2);
         assert!(moves.contains(&Move::new(Square::from_u32(0), Square::from_u32(8))));
         assert!(moves.contains(&Move::new(Square::from_u32(0), Square::from_u32(9))));

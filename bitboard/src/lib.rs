@@ -1,6 +1,6 @@
 pub mod patterns;
 
-use utils::file;
+use utils::{file, direction::{NORT, EAST, NOEA, NOWE}};
 
 pub fn is_empty(bb: u64) -> bool {
     bb == 0
@@ -25,35 +25,35 @@ pub fn count_bits(bb: u64) -> u32 {
 }
 
 pub fn south_one(b: u64) -> u64 {
-    b >> 8
+    b >> NORT
 }
 
 pub fn north_one(b: u64) -> u64 {
-    b << 8
+    b << NORT
 }
 
 pub fn east_one(b: u64) -> u64 {
-    (b << 1) & file::NOT_A_FILE
+    (b << EAST) & file::NOT_A_FILE
 }
 
 pub fn no_east_one(b: u64) -> u64 {
-    (b << 9) & file::NOT_A_FILE
+    (b << NOEA) & file::NOT_A_FILE
 }
 
 pub fn so_east_one(b: u64) -> u64 {
-    (b >> 7) & file::NOT_A_FILE
+    (b >> NOWE) & file::NOT_A_FILE
 }
 
 pub fn west_one(b: u64) -> u64 {
-    (b >> 1) & file::NOT_H_FILE
+    (b >> EAST) & file::NOT_H_FILE
 }
 
 pub fn no_west_one(b: u64) -> u64 {
-    (b << 7) & file::NOT_H_FILE
+    (b << NOWE) & file::NOT_H_FILE
 }
 
 pub fn so_west_one(b: u64) -> u64 {
-    (b >> 9) & file::NOT_H_FILE
+    (b >> NOEA) & file::NOT_H_FILE
 }
 
 #[cfg(test)]

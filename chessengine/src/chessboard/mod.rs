@@ -12,10 +12,10 @@ use self::moves::Move;
 pub mod moves;
 pub mod perft;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Chessboard {
-    piece_board: HashMap<Piece, u64>,
-    color_board: HashMap<Color, u64>,
+    piece_board: Vec<u64>,
+    color_board: Vec<u64>,
     pub empty_board: u64,
     pub turn: Color,
     pub white_castle: (bool, bool),
@@ -29,6 +29,8 @@ pub struct Chessboard {
     ep_stack: Vec<Option<Square>>,
     hm_stack: Vec<u8>,
     pub mv_hashmap: HashMap<String, u32>,
+    pub is_checkmate: bool,
+    pub is_stalemate: bool,
 }
 
 impl Chessboard {
@@ -37,16 +39,17 @@ impl Chessboard {
 
         // Parse the piece board.
         let piece_placement = perft_parts[0];
-        let mut piece_board = HashMap::new();
-        piece_board.insert(Piece::Pawn, 0);
-        piece_board.insert(Piece::Knight, 0);
-        piece_board.insert(Piece::Bishop, 0);
-        piece_board.insert(Piece::Rook, 0);
-        piece_board.insert(Piece::Queen, 0);
-        piece_board.insert(Piece::King, 0);
-        let mut color_board = HashMap::new();
-        color_board.insert(Color::White, 0);
-        color_board.insert(Color::Black, 0);
+        let mut piece_board = Vec::new();
+        piece_board.push(0);
+        piece_board.push(0);
+        piece_board.push(0);
+        piece_board.push(0);
+        piece_board.push(0);
+        piece_board.push(0);
+        piece_board.push(0);
+        let mut color_board = Vec::new();
+        color_board.push(0);
+        color_board.push(0);
         let mut empty_board = 0xff_ff_ff_ff_ff_ff_ff_ff;
         let mut rank = Rank::Eight;
         let mut file = File::A;
@@ -81,8 +84,8 @@ impl Chessboard {
                     Color::White
                 };
 
-                *piece_board.entry(piece).or_insert(0) |= 1 << (rank as u32 * 8 + file as u32);
-                *color_board.entry(color).or_insert(0) |= 1 << (rank as u32 * 8 + file as u32);
+                piece_board[piece.to_usize()] |= 1 << (rank as u32 * 8 + file as u32);
+                color_board[color.to_usize()] |= 1 << (rank as u32 * 8 + file as u32);
                 empty_board &= !(1 << (rank as u32 * 8 + file as u32));
 
                 if file != File::H {
@@ -138,6 +141,8 @@ impl Chessboard {
         let ep_stack = Vec::new();
         let hm_stack = Vec::new();
         let mv_hashmap = HashMap::new();
+        let is_checkmate = false;
+        let is_stalemate = false;
 
         Chessboard {
             piece_board,
@@ -155,6 +160,8 @@ impl Chessboard {
             ep_stack,
             hm_stack,
             mv_hashmap,
+            is_checkmate,
+            is_stalemate,
         }
     }
 
@@ -305,15 +312,15 @@ impl Chessboard {
     }
 
     pub fn get_pieces_color(&self, piece: &Piece, color: &Color) -> u64 {
-        self.get_pieces(piece)& self.color_board[&color]
+        self.get_pieces(piece)& self.color_board[color.to_usize()]
     }
 
     pub fn get_pieces(&self, piece: &Piece) -> u64 {
-        self.piece_board[&piece]
+        self.piece_board[piece.to_usize()]
     }
 
     pub fn get_colors(&self, color: &Color) -> u64 {
-        self.color_board[&color]
+        self.color_board[color.to_usize()]
     }
 
     pub fn get_opposite_color(&self, color: &Color) -> Color {
@@ -351,8 +358,9 @@ impl Chessboard {
         }
     }
 
-    fn is_attacked(&self, pos: u64, color: &Color, enemies: u64, gen: fn(u64, &Chessboard, &Color) -> Vec<Move>) -> bool {
-        let moves = gen(pos, &self, color);
+    fn is_attacked(&self, pos: u64, color: &Color, enemies: u64, gen: fn(u64, &Chessboard, &Color, &mut Vec<Move>)) -> bool {
+        let moves = &mut Vec::new();
+        gen(pos, &self, color, moves);
 
         for mv in moves.iter() {
             if enemies & mv.to.to_bitboard() != 0 {
@@ -385,11 +393,30 @@ impl Chessboard {
         self.is_attacked(square, color, king, moves::piece::king::generate_pseudo_moves)
     }
 
-    pub fn is_in_check(&self) -> bool {
-        let opposite = self.get_opposite_color(&self.turn);
-        let opposite_king = self.get_pieces_color(&Piece::King, &opposite);
+    pub fn is_making_check(&self, color: &Color) -> bool {
+        let opposite = self.get_opposite_color(color);
 
-        self.is_attacked_square(opposite_king, &opposite)
+        self.is_in_check(&opposite)
+    }
+
+    pub fn is_in_check(&self, color: &Color) -> bool {
+        let king = self.get_pieces_color(&Piece::King, color);
+
+        self.is_attacked_square(king, color)
+    }
+
+    pub fn is_checkmate(&self, color: &Color) -> bool {
+        if !self.is_in_check(color) {
+            return false;
+        }
+
+        let mut copy = self.clone();
+        if *color != copy.turn {
+            copy.turn = *color;
+        }
+
+        let moves = copy.generate_legal_moves();
+        moves.len() == 0
     }
 
     pub fn push(&mut self) {
@@ -420,9 +447,19 @@ mod tests {
         assert_eq!(chessboard.is_attacked_square(square.to_bitboard(), color), expected);
     }
 
-    fn test_is_in_check(fen: &str, expected: bool) {
+    fn test_is_in_check(fen: &str, color: &Color, expected: bool) {
         let chessboard = Chessboard::new(fen.to_string());
-        assert_eq!(chessboard.is_in_check(), expected);
+        assert_eq!(chessboard.is_in_check(color), expected);
+    }
+
+    fn test_is_making_check(fen: &str, color: &Color, expected: bool) {
+        let chessboard = Chessboard::new(fen.to_string());
+        assert_eq!(chessboard.is_making_check(color), expected);
+    }
+
+    fn test_is_checkmate(fen: &str, color: &Color, expected: bool) {
+        let chessboard = Chessboard::new(fen.to_string());
+        assert_eq!(chessboard.is_checkmate(color), expected);
     }
 
     #[test]
@@ -431,6 +468,16 @@ mod tests {
         test_is_attacked_square("8/8/8/8/8/8/2n5/4K3 w - - 0 1 1", Square::from_string("e1"), &Color::White, true);
         test_is_attacked_square("8/4r3/8/8/8/8/8/4K3 w - - 0 1 1", Square::from_string("e1"), &Color::White, true);
 
-        test_is_in_check("8/8/4q3/8/8/8/8/4K3 b - - 0 1 1", true);
+        test_is_in_check("4k3/8/4q3/8/8/8/8/4K3 b - - 0 1 1", &Color::White, true);
+        test_is_in_check("4k3/8/4q3/8/8/8/8/4K3 w - - 0 1 1", &Color::White, true);
+        test_is_making_check("4k3/8/4q3/8/8/8/8/4K3 b - - 0 1 1", &Color::Black, true);
+        test_is_making_check("4k3/8/4q3/8/8/8/8/4K3 w - - 0 1 1", &Color::Black, true);
+
+        test_is_checkmate("4k3/8/4q3/8/8/8/8/4K3 b - - 0 1 1", &Color::White, false);
+        test_is_checkmate("4k3/8/4q3/8/8/8/8/4K3 b - - 0 1 1", &Color::Black, false);
+        test_is_checkmate("4k3/8/4q3/8/8/8/8/4K3 w - - 0 1 1", &Color::White, false);
+        test_is_checkmate("4k3/8/4q3/8/8/8/8/4K3 w - - 0 1 1", &Color::Black, false);
+        test_is_checkmate("4k3/8/3rqr2/8/8/8/8/4K3 w - - 0 1 1", &Color::White, true);
+        test_is_checkmate("4k3/8/3rqr2/8/8/8/8/4K3 b - - 0 1 1", &Color::Black, false);
     }
 }

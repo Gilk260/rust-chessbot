@@ -39,45 +39,45 @@ impl Move {
 }
 
 impl Chessboard {
+    pub fn generate_legal_moves(&mut self) -> Vec<Move> {
+        let pseudo_moves = self.generate_moves();
+        let mut legal_moves = Vec::new();
+        self.is_checkmate = false;
+        self.is_stalemate = false;
+
+        for mv in pseudo_moves {
+            self.make_move(&mv);
+            if !self.is_making_check(&self.turn) {
+                legal_moves.push(mv.clone());
+            }
+            self.unmake_move(&mv);
+        }
+        legal_moves.append(&mut piece::king::generate_castling_moves(self, &self.turn));
+
+        legal_moves
+    }
+
     pub fn generate_moves(&self) -> Vec<Move> {
-        let mut moves = Vec::new();
-        let enemies = self.get_colors(&self.get_opposite_color(&self.turn));
+        let moves = &mut Vec::new();
 
-        moves.append(
-            &mut piece::pawn::generate_pseudo_moves(
-                self.get_pieces_color(&Piece::Pawn, &self.turn),
-                &enemies,
-                self,
-                &self.turn));
-        moves.append(
-            &mut piece::knight::generate_pseudo_moves(
-                self.get_pieces_color(&Piece::Knight, &self.turn),
-                self,
-                &self.turn));
-        moves.append(
-            &mut piece::king::generate_pseudo_moves(
-                self.get_pieces_color(&Piece::King, &self.turn),
-                self,
-                &self.turn));
-        moves.append(
-            &mut piece::sliding_piece::bishop::generate_pseudo_moves(
-                self.get_pieces_color(&Piece::Bishop, &self.turn),
-                self,
-                &self.turn));
-        moves.append(
-            &mut piece::sliding_piece::rook::generate_pseudo_moves(
-                self.get_pieces_color(&Piece::Rook, &self.turn),
-                self,
-                &self.turn));
-        moves.append(
-            &mut piece::sliding_piece::queen::generate_pseudo_moves(
-                self.get_pieces_color(&Piece::Queen, &self.turn),
-                self,
-                &self.turn));
-        moves.append(
-            &mut piece::king::generate_castling_moves(self, &self.turn));
+        let generations: [(fn(u64, &Chessboard, &Color, &mut Vec<Move>), Piece); 6] = [
+            (piece::pawn::generate_pseudo_moves, Piece::Pawn),
+            (piece::knight::generate_pseudo_moves, Piece::Knight),
+            (piece::king::generate_pseudo_moves, Piece::King),
+            (piece::sliding_piece::bishop::generate_pseudo_moves, Piece::Bishop),
+            (piece::sliding_piece::rook::generate_pseudo_moves, Piece::Rook),
+            (piece::sliding_piece::queen::generate_pseudo_moves, Piece::Queen),
+        ];
 
-        moves
+        for (generation, piece) in generations.iter() {
+            generation(
+                self.get_pieces_color(piece, &self.turn),
+                self,
+                &self.turn,
+                moves);
+        }
+
+        moves.to_vec()
     }
 
     pub fn generate_move_from_string(
@@ -87,7 +87,7 @@ impl Chessboard {
         let from = Square::from_string(&mv[0..2]);
         let to = Square::from_string(&mv[2..4]);
 
-        let mut res = self.generate_move(from, to)[0];
+        let mut res = self.generate_move(from, to);
 
         if mv.len() == 5 {
             res.promotion = match mv[4..5].chars().nth(0).unwrap() {
@@ -106,8 +106,7 @@ impl Chessboard {
         &self,
         from: Square,
         to: Square,
-    ) -> Vec<Move> {
-        let mut moves: Vec<Move> = Vec::new();
+    ) -> Move {
         let mut res = Move::new(from, to);
 
         // Handle capture
@@ -124,45 +123,43 @@ impl Chessboard {
         }
 
         // Handle promotion
-        if let Some(piece) = self.get_piece(&res.from) {
-            if piece == Piece::Pawn {
-                moves.append(&mut self.generate_promotion_moves(res));
-            }
-            else {
-                moves.push(res);
-            }
-        }
-        else {
-            moves.push(res);
-        }
+        //if let Some(piece) = self.get_piece(&res.from) {
+        //    if piece == Piece::Pawn {
+        //        self.generate_promotion_moves(&mut moves, res);
+        //    }
+        //    else {
+        //        moves.push(res);
+        //    }
+        //}
+        //else {
+        //    moves.push(res);
+        //}
 
-        moves
+        res
     }
 
-    fn generate_promotion_moves(&self, promo: Move) -> Vec<Move> {
-        let mut moves: Vec<Move> = Vec::new();
-        let mut promo = promo;
+    fn generate_promotion_moves(&self, moves: &mut Vec<Move>, mv: Move) {
+        let mut mv = mv;
 
         let rank_promotion = match self.turn {
             Color::White => Rank::Eight,
             Color::Black => Rank::One,
         };
 
-        if promo.to.rank == rank_promotion {
+        if mv.to.rank == rank_promotion {
             for promotion in vec![
                 Piece::Knight,
                 Piece::Bishop,
                 Piece::Rook,
                 Piece::Queen
             ] {
-                promo.promotion = Some(promotion);
-                moves.push(promo);
+                mv.promotion = Some(promotion);
+                moves.push(mv);
             }
         }
         else {
-            moves.push(promo);
+            moves.push(mv);
         }
-        moves
     }
 
     fn make_castling(&mut self, mv: &Move) {
@@ -183,14 +180,14 @@ impl Chessboard {
 
         let square_src_dst = square_rook_src.to_bitboard() | square_rook_dst.to_bitboard();
 
-        *self.piece_board.entry(Piece::Rook).or_insert(0) ^= square_src_dst;
-        *self.color_board.entry(self.turn).or_insert(0) ^= square_src_dst;
+        self.piece_board[Piece::Rook.to_usize()] ^= square_src_dst;
+        self.color_board[self.turn.to_usize()] ^= square_src_dst;
         self.empty_board ^= square_src_dst;
     }
 
     fn update_castling_rights(&mut self) {
+        let square_e1 = self.get_piece(&Square::from_string("e1"));
         if self.white_castle.0 {
-            let square_e1 = self.get_piece(&Square::from_string("e1"));
             if square_e1 == None || square_e1.unwrap() != Piece::King {
                 self.white_castle.0 = false;
                 self.white_castle.1 = false;
@@ -201,7 +198,6 @@ impl Chessboard {
             }
         }
         if self.white_castle.1 {
-            let square_e1 = self.get_piece(&Square::from_string("e1"));
             if square_e1 == None || square_e1.unwrap() != Piece::King {
                 self.white_castle.0 = false;
                 self.white_castle.1 = false;
@@ -212,8 +208,8 @@ impl Chessboard {
             }
         }
 
+        let square_e8 = self.get_piece(&Square::from_string("e8"));
         if self.black_castle.0 {
-            let square_e8 = self.get_piece(&Square::from_string("e8"));
             if square_e8 == None || square_e8.unwrap() != Piece::King {
                 self.black_castle.0 = false;
                 self.black_castle.1 = false;
@@ -240,13 +236,15 @@ impl Chessboard {
         //self.pretty_print();
         //println!("Move: {}", mv.to_string());
         self.push();
-        self.perft_depth -= 1;
+        if self.perft_depth > 0 {
+            self.perft_depth -= 1;
+        }
         let mut piece = self.get_piece(&mv.from).unwrap();
         let opposite = self.get_opposite_color(&self.turn);
         let mut next_ep = None;
 
-        *self.piece_board.entry(piece).or_insert(0) ^= mv.from.to_bitboard();
-        *self.color_board.entry(self.turn).or_insert(0) ^= mv.from.to_bitboard();
+        self.piece_board[piece.to_usize()] ^= mv.from.to_bitboard();
+        self.color_board[self.turn.to_usize()] ^= mv.from.to_bitboard();
         self.empty_board ^= mv.from.to_bitboard();
 
         if piece == Piece::Pawn {
@@ -280,24 +278,24 @@ impl Chessboard {
                     Color::Black => NORT,
                 };
                 let real_square = Square::from_u32(real_pos as u32);
-                *self.piece_board.entry(captured).or_insert(0) ^= real_square.to_bitboard();
-                *self.color_board.entry(opposite).or_insert(0) ^= real_square.to_bitboard();
+                self.piece_board[captured.to_usize()] ^= real_square.to_bitboard();
+                self.color_board[opposite.to_usize()] ^= real_square.to_bitboard();
                 self.empty_board ^= real_square.to_bitboard() | mv.to.to_bitboard();
             } else {
-                *self.piece_board.entry(captured).or_insert(0) ^= mv.to.to_bitboard();
-                *self.color_board.entry(opposite).or_insert(0) ^= mv.to.to_bitboard();
+                self.piece_board[captured.to_usize()] ^= mv.to.to_bitboard();
+                self.color_board[opposite.to_usize()] ^= mv.to.to_bitboard();
             }
         } else {
             self.empty_board ^= mv.to.to_bitboard();
         }
 
-        *self.piece_board.entry(piece).or_insert(0) |= mv.to.to_bitboard();
-        *self.color_board.entry(self.turn).or_insert(0) |= mv.to.to_bitboard();
+        self.piece_board[piece.to_usize()] |= mv.to.to_bitboard();
+        self.color_board[self.turn.to_usize()] |= mv.to.to_bitboard();
 
         self.update_castling_rights();
 
         self.turn = opposite;
-        self.halfmove_clock += 1;
+        //self.halfmove_clock += 1;
         self.en_passant = next_ep;
 
         if self.turn == Color::White {
@@ -310,16 +308,16 @@ impl Chessboard {
         self.turn = self.get_opposite_color(&self.turn);
         let mut piece = self.get_piece(&mv.to).unwrap();
 
-        *self.piece_board.entry(piece).or_insert(0) ^= mv.to.to_bitboard();
-        *self.color_board.entry(self.turn).or_insert(0) ^= mv.to.to_bitboard();
+        self.piece_board[piece.to_usize()] ^= mv.to.to_bitboard();
+        self.color_board[self.turn.to_usize()] ^= mv.to.to_bitboard();
         self.empty_board ^= mv.to.to_bitboard();
 
         if mv.promotion != None {
             piece = Piece::Pawn;
         }
 
-        *self.piece_board.entry(piece).or_insert(0) |= mv.from.to_bitboard();
-        *self.color_board.entry(self.turn).or_insert(0) |= mv.from.to_bitboard();
+        self.piece_board[piece.to_usize()] |= mv.from.to_bitboard();
+        self.color_board[self.turn.to_usize()] |= mv.from.to_bitboard();
         self.empty_board ^= mv.from.to_bitboard();
 
         self.pop();
@@ -342,12 +340,12 @@ impl Chessboard {
                     Color::Black => NORT,
                 };
                 let real_square = Square::from_u32(real_pos as u32);
-                *self.piece_board.entry(capture).or_insert(0) |= real_square.to_bitboard();
-                *self.color_board.entry(self.get_opposite_color(&self.turn)).or_insert(0) |= real_square.to_bitboard();
+                self.piece_board[capture.to_usize()] |= real_square.to_bitboard();
+                self.color_board[self.turn.opposite().to_usize()] |= real_square.to_bitboard();
                 self.empty_board ^= real_square.to_bitboard();
             } else {
-                *self.piece_board.entry(capture).or_insert(0) |= mv.to.to_bitboard();
-                *self.color_board.entry(self.get_opposite_color(&self.turn)).or_insert(0) |= mv.to.to_bitboard();
+                self.piece_board[capture.to_usize()] |= mv.to.to_bitboard();
+                self.color_board[self.turn.opposite().to_usize()] |= mv.to.to_bitboard();
                 self.empty_board ^= mv.to.to_bitboard();
             }
         }
@@ -396,7 +394,6 @@ mod tests {
 
     fn test_make_move(fen: &str, mv: &str, expected: &str) {
         let mut chessboard = Chessboard::new(fen.to_string());
-        println!("{:?}", chessboard.en_passant);
         let mv = chessboard.generate_move_from_string(mv.to_string());
         chessboard.make_move(&mv);
         let expected = Chessboard::new(expected.to_string());
